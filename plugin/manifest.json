@@ -1,0 +1,35 @@
+{
+ "id": "4ad3fd3e-99f1-4527-9d63-7633ea8ac540",
+ "version": "1.0.0",
+ "platform": "win",
+ "arch": "x64",
+ "name": "Video Duplicate Finder",
+ "logo": "/logo.png",
+ "keywords": [
+  "duplicate",
+  "video",
+  "similar",
+  "dedupe",
+  "vdf",
+  "compare"
+ ],
+ "devTools": false,
+ "dependencies": [
+  "ffmpeg"
+ ],
+ "main": {
+  "url": "index.html",
+  "width": 1320,
+  "height": 860,
+  "minWidth": 980,
+  "minHeight": 620,
+  "frame": false,
+  "backgroundColor": "#2a2b2f",
+  "multiple": false,
+  "keepAlive": true,
+  "fullscreenable": true,
+  "maximizable": true,
+  "minimizable": true,
+  "resizable": true
+ }
+}

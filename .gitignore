@@ -1,0 +1,17 @@
+# build output (packages are attached to GitHub releases)
+dist/
+
+# runtime dependency, installed by tools/setup-runtime.js
+node_modules/
+plugin/package-lock.json
+
+# generated test media (tools/make-fixtures.js)
+test/fixtures/
+
+# local working notes
+PLAN.md
+
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini

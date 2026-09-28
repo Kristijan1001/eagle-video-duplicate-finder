@@ -1,0 +1,42 @@
+Video Duplicate Finder for Eagle — third-party notices
+======================================================
+
+This plugin is a port of Video Duplicate Finder (VDF) by 0x90d and contributors,
+https://github.com/0x90d/videoduplicatefinder, licensed under the GNU Affero General
+Public License v3.0. The plugin itself is distributed under the same license (see LICENSE).
+Its complete source code is the JavaScript in this package.
+
+
+onnxruntime-node / onnxruntime-common 1.16.3 (bundled in node_modules)
+-----------------------------------------------------------------------
+https://github.com/microsoft/onnxruntime — MIT License
+
+Copyright (c) Microsoft Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+Not bundled, used at run time
+-----------------------------
+FFmpeg / FFprobe — provided by Eagle's own FFmpeg module (installed by Eagle).
+
+DINOv2-small, int8 ONNX export (Xenova/dinov2-small) — Apache License 2.0,
+original model by Meta AI. Downloaded only when you enable AI matching and agree to the
+download, from the VDF release (github.com/0x90d/videoduplicatefinder) with Hugging Face
+as a fallback, and verified by SHA-256 before use.
