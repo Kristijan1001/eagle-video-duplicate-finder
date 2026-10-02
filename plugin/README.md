@@ -26,9 +26,29 @@ https://github.com/Kristijan1001/eagle-video-duplicate-finder
 4. **Compare** (the compare button on a group) shows two files side by side, plays them in
    sync and steps them frame by frame.
 
-Nothing in the library changes until the user runs an action in Results. Trashing always
-shows a confirmation with the number and size of the items. Tagging, moving and renaming start
-from a dialog where the user enters the tag, folder or name.
+Nothing in the library changes until the user runs an action in Results.
+
+## Confirmations before batch changes
+
+Every action that changes several Eagle items at once asks first, and the confirmation lists
+exactly the items it will change; only those items are changed.
+
+- **Trash checked** (also *Merge into kept copies, then trash* and a group's *Merge into best
+  copy*): shows the number and size of the items, their names, which copy stays, and a warning
+  when a group would lose every copy.
+- **Move checked to folder…**: the folder picker states how many items will be moved and that
+  their current folders are replaced. Choosing a folder only selects it (no double-click
+  shortcut). A separate confirmation then shows the count, the destination path, and each
+  item's current folders next to the new one.
+- **Add checked to folder…** and **Tag checked / Add tag to checked**: the same kind of
+  confirmation, stating that current folders and tags are kept.
+- In every confirmation, keyboard focus starts on **Cancel**: Enter cancels and never confirms.
+  Keyboard focus moves into the dialog when it opens and stays inside it while it is open.
+- **Don't ask again:** each of these confirmations has an unticked "Don't ask again" box. If a
+  user ticks it and confirms, that one confirmation is turned off; all four are listed under
+  **Settings → Confirmations** (on by default) and can be switched back on there. Removing
+  every copy of a group always asks and never offers "Don't ask again". If this option is a
+  problem for the review, it can be removed.
 
 ## What the plugin changes in Eagle (only on user action)
 
@@ -36,8 +56,10 @@ from a dialog where the user enters the tag, folder or name.
   trash. It never deletes files. Undo restores them.
 - **Optional merge before trashing:** copies tags, folders, rating, annotation and source URL
   from the trashed copies onto the kept one. Undo reverts it.
-- Also on request: add a tag, add to or move to a folder, rename an item, and export copies of
-  files to a folder the user picks. Folder moves, tags and renames can be undone.
+- **Move to folder:** replaces each item's folder associations with the chosen folder (files are
+  not moved on disk). **Add to folder** and **tag** keep the existing folders and tags.
+- Also on request: rename an item, and export copies of files to a folder the user picks.
+  Trash, merges, folder changes, tags and renames can be undone.
 
 ## Data it writes outside Eagle
 

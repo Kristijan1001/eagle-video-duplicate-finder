@@ -5,6 +5,7 @@
 //   node ctl.js shot out.png
 //   node ctl.js console
 //   node ctl.js reload | quit | size W H
+//   node ctl.js key Enter          real key press (Enter, Tab, Delete, Escape, a…)
 
 const http = require('http');
 const fs = require('fs');
@@ -33,5 +34,6 @@ function req(method, pathname, body) {
 	else if (cmd === 'reload') out = await req('GET', '/reload');
 	else if (cmd === 'quit') out = await req('GET', '/quit');
 	else if (cmd === 'size') out = await req('GET', `/size?w=${a}&h=${b}`);
+	else if (cmd === 'key') out = await req('GET', `/key?code=${encodeURIComponent(a)}`);
 	console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 1));
 })().catch((e) => { console.error(String(e)); process.exit(1); });

@@ -181,6 +181,11 @@ Legend: **Port** = same behaviour, **Adapt** = same intent through the Eagle equ
 ## 5. Safety rules
 - It never deletes files itself. The only removal path is Eagle's own trash.
 - The trash confirmation shows the item count and total size. A dry-run report is available first.
+- Batch changes (trash, move or add to folder, tag) confirm first and change exactly the items the
+  confirmation lists. Moving shows each item's current folders next to the destination, since it
+  replaces them. Focus starts on Cancel, so Enter never confirms; "Don't ask again" turns one
+  confirmation off (Settings → Confirmations), except trashing every copy of a group, which
+  always asks.
 - A merge writes a JSON undo record (the keeper's metadata before the merge plus the trashed ids), and *Undo last action* restores the keeper and pulls the items back out of Eagle's trash.
 - The scan is read-only toward the library. The cache lives outside the `.library`.
 

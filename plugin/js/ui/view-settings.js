@@ -99,6 +99,13 @@ function create(app) {
 			{ key: 'mergeAnnotation', label: 'Join annotations', type: 'switch' },
 			{ key: 'mergeUrl', label: 'Take a source URL when the keeper has none', type: 'switch' },
 		] },
+		{ id: 'confirm', title: 'Confirmations', icon: 'shield', rows: [
+			{ key: '_confirmNote', label: 'Before changing Eagle items', desc: 'Each action shows what it will change and waits for you to confirm. "Don\'t ask again" in a confirmation turns that one off here; switch it back on any time.', type: 'custom', render: () => h('span') },
+			{ key: 'confirmTrash', label: 'Ask before moving items to the trash', desc: 'Trash checked, Merge then trash, and a group\'s Merge into best copy. Trashed items can be restored from Eagle\'s trash or with Undo. Removing every copy of a group always asks, even with this off.', type: 'switch' },
+			{ key: 'confirmMoveToFolder', label: 'Ask before moving items to a folder', desc: 'Moving replaces each item\'s current folders with the chosen one.', type: 'switch' },
+			{ key: 'confirmAddToFolder', label: 'Ask before adding items to a folder', desc: 'Items keep their current folders.', type: 'switch' },
+			{ key: 'confirmAddTag', label: 'Ask before tagging items', desc: 'Tag checked and Add tag to checked. Existing tags are kept.', type: 'switch' },
+		] },
 		{ id: 'commands', title: 'Custom commands', icon: 'bolt', rows: [
 			{ key: '_cmd', label: 'Open with a custom program', desc: 'Templates: %1 = the file, %* = all files (quoted), %d = folder of the first file. Example: "C:\\Tools\\mpv\\mpv.exe" %1', type: 'custom', render: renderCommands },
 		] },
@@ -278,7 +285,7 @@ function create(app) {
 			h('button.btn.small', { onclick: () => eagle.shell.openPath(root) }, icon('folderOpen', 13), 'Open'));
 	}
 	function renderKeys() {
-		const keys = [['↑ / ↓', 'Move between files'], ['← / → or P / N', 'Previous / next group'], ['Space', 'Check / uncheck'], ['K', 'Keep this copy, check the rest, next group'], ['Enter', 'Open (or custom command)'], ['C', 'Compare the group (play, step frames, keep/check)'], ['Del', 'Trash checked (asks first)'], ['Ctrl+Z', 'Undo selection'], ['Ctrl+F', 'Filter'], ['Ctrl+1…5', 'Switch page'], ['Ctrl+Enter', 'Start scan (Scan page)']];
+		const keys = [['↑ / ↓', 'Move between files'], ['← / → or P / N', 'Previous / next group'], ['Space', 'Check / uncheck'], ['K', 'Keep this copy, check the rest, next group'], ['Enter', 'Open (or custom command)'], ['C', 'Compare the group (play, step frames, keep/check)'], ['Del', 'Trash checked (asks first, see Confirmations)'], ['Ctrl+Z', 'Undo selection'], ['Ctrl+F', 'Filter'], ['Ctrl+1…5', 'Switch page'], ['Ctrl+Enter', 'Start scan (Scan page)']];
 		return h('div.kv', { style: { gridTemplateColumns: '130px 1fr' } }, keys.flatMap(([k, d]) => [h('div.mono.small', k), h('div.small.muted', d)]));
 	}
 	function renderAbout() {

@@ -244,12 +244,19 @@ function bind(app) {
 	}
 
 	// ── Folder picker (for add/move) ──
-	async function pickFolder(title) {
+	/**
+	 * Choose a destination folder. Choosing never changes anything by itself: the caller shows
+	 * its confirmation next (`confirmNext`), or, with that turned off, the button says what runs.
+	 * A click selects a folder; only the button commits (no double-click shortcut).
+	 */
+	async function pickFolder({ title, count, mode, confirmNext }) {
 		await app.eagleData.loadFolders();
+		const move = mode === 'move';
 		let chosen = null;
 		let q = '';
 		const tree = h('div.tree', { style: { maxHeight: '420px' } });
 		const search = h('input.input', { placeholder: 'Filter folders', style: { width: '100%', marginBottom: '8px' } });
+		const ok = h('button.btn.primary', { disabled: true }, confirmNext ? 'Continue' : `${move ? 'Move' : 'Add'} ${number(count)} item(s) here`);
 		const render = () => {
 			clear(tree);
 			const folders = app.eagleData.folders;
@@ -259,14 +266,18 @@ function bind(app) {
 			const node = (id) => {
 				const f = folders.get(id);
 				if (ql && !matches.has(id)) return;
-				tree.appendChild(h(`div.tree-row${chosen === id ? '' : ''}`, { style: { paddingLeft: `${6 + f.depth * 16}px`, background: chosen === id ? 'var(--accent-soft)' : '' }, onclick: () => { chosen = id; render(); }, ondblclick: () => { chosen = id; m.close(id); } }, icon('folder', 15), h('span.name', f.name)));
+				tree.appendChild(h('div.tree-row', { style: { paddingLeft: `${6 + f.depth * 16}px`, background: chosen === id ? 'var(--accent-soft)' : '' }, onclick: () => { chosen = id; render(); } }, icon('folder', 15), h('span.name', f.name)));
 				for (const c of f.children) node(c);
 			};
 			for (const r of app.eagleData.roots) node(r);
+			ok.disabled = !chosen;
 		};
 		search.addEventListener('input', () => { q = search.value; render(); });
 		render();
-		const ok = h('button.btn.primary', 'Choose');
+		const scope = h('div.callout.info.picker-scope', icon('info', 18), h('div',
+			move ? `${number(count)} checked item(s) will be moved to the folder you choose. Moving replaces their current folders, so afterwards they are only in that folder.`
+				: `${number(count)} checked item(s) will be added to the folder you choose. They stay in their current folders as well.`,
+			confirmNext ? ' Nothing changes until you confirm on the next step.' : ''));
 		const newBtn = h('button.btn.ghost.left', { onclick: async () => {
 			const name = await kit.promptDialog({ title: 'New folder', label: chosen ? `Inside "${app.eagleData.folders.get(chosen).name}"` : 'At the top level', validate: (v) => (v.trim() ? null : 'Enter a name') });
 			if (!name) return;
@@ -274,8 +285,9 @@ function bind(app) {
 			chosen = f.id;
 			render();
 		} }, icon('plus', 14), 'New folder');
-		const m = kit.modal({ title, icon: 'folder', body: [search, tree], foot: [newBtn, h('button.btn', { onclick: () => m.close(null) }, 'Cancel'), ok] });
+		const m = kit.modal({ title, icon: 'folder', body: [scope, search, tree], foot: [newBtn, h('button.btn', { onclick: () => m.close(null) }, 'Cancel'), ok] });
 		ok.onclick = () => { if (chosen) m.close(chosen); };
+		search.focus();
 		return m.result;
 	}
 

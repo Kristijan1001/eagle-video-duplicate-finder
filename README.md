@@ -7,8 +7,9 @@ of longer videos. It is a port of [Video Duplicate Finder](https://github.com/0x
 audio fingerprints, the DINOv2 AI pass), and everything around it is rebuilt on Eagle's own items,
 folders, tags, ratings and trash.
 
-Nothing in your library changes until you choose an action in Results. Trash goes to Eagle's
-trash, and the last action can be undone.
+Nothing in your library changes until you choose an action in Results. Actions that change
+several items ask first and list exactly what they will change. Trash goes to Eagle's trash, and
+the last action can be undone.
 
 ## Install
 
@@ -66,6 +67,11 @@ bitrate, codec, duration, size, folders, tags and rating. The best copy in each 
   folder, export copies to disk, rename, mark groups "not a match" (hidden in future scans), remove
   from the list or exclude from future scans, save a dry-run report, and export results as
   JSON/CSV/HTML.
+- Trashing, moving or adding to a folder, and tagging ask first. The confirmation shows how many
+  items change, lists them, and for a move shows each item's current folders next to the new one
+  (moving replaces an item's folders; adding keeps them). Focus starts on **Cancel**, so Enter
+  never confirms. **Don't ask again** turns one confirmation off; Settings → Confirmations turns
+  it back on. Trashing every copy of a group always asks.
 - **Compare** (`C`, double-click, or the group's compare button) shows two files of a group
   in Single, Swipe, Side by side or Stacked view:
   - It plays both in sync, steps both a frame or a second at a time, and scrubs a timeline
@@ -91,8 +97,8 @@ bitrate, codec, duration, size, folders, tags and rating. The best copy in each 
   difference to the best one, like VDF. **Compare values with the best** in a row's menu keeps
   those differences shown.
 - Keyboard: `↑ ↓` move, `Space` check, `K` keep this one and go to the next group, `Enter` open,
-  `C` compare, `Del` trash checked, `Ctrl+Z` undo selection, `Ctrl+F` filter, `Ctrl+1…5` switch
-  pages.
+  `C` compare, `Del` trash checked (asks first), `Ctrl+Z` undo selection, `Ctrl+F` filter,
+  `Ctrl+1…5` switch pages.
 
 **Database** shows the fingerprint cache for the current library. From there you can clean it up,
 retry failed files, export or import it as JSON, clear it, and manage excluded items and "not a
@@ -177,7 +183,8 @@ tools/             test runner, fixture generator, UI harness, packager
 - `tools/ui-harness` runs the real UI in Electron 22 (Eagle's version) against a mock `eagle` API
   over the fixtures, with a local control endpoint for scripted checks
   (`npx electron@22 tools/ui-harness/main.js --eagle-url`). `--eagle-url` loads the page exactly
-  as Eagle does (`eagleplugin://` scheme and Eagle's `require` override).
+  as Eagle does (`eagleplugin://` scheme and Eagle's `require` override). `node
+  tools/ui-harness/ctl.js key Enter` sends a real key press, for checking dialog focus.
 
 ### Building
 

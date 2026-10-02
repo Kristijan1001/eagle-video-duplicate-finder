@@ -1,7 +1,7 @@
 {
   "name": "eagle-video-duplicate-finder",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Video Duplicate Finder for Eagle",
   "license": "AGPL-3.0-or-later",
   "author": "Kristijan1001",

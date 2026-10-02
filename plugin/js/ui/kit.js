@@ -52,15 +52,19 @@ function menu(anchor, items, { align = 'left' } = {}) {
 }
 
 const modalStack = [];
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /**
  * Open a modal. Returns { el, body, foot, close(result), result: Promise }.
+ * Keyboard focus moves into the dialog (so Enter can never reach the button that opened it),
+ * Tab stays inside it, and focus returns to that button when the dialog closes.
  */
 function modal({ title, width = '', body, foot, onClose, closeOnBackdrop = true, icon: ic }) {
 	let resolve;
 	const result = new Promise((r) => { resolve = r; });
+	const opener = document.activeElement;
 	const back = h('div.modal-back');
-	const box = h(`div.modal${width ? '.' + width : ''}`, { role: 'dialog', 'aria-modal': 'true' });
+	const box = h(`div.modal${width ? '.' + width : ''}`, { role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
 	const head = h('div.modal-head', ic ? icon(ic, 18) : null, h('h2', title || ''),
 		h('button.icon-btn', { title: 'Close', onclick: () => api.close(undefined) }, icon('close', 16)));
 	const bodyEl = h('div.modal-body');
@@ -70,16 +74,25 @@ function modal({ title, width = '', body, foot, onClose, closeOnBackdrop = true,
 	if (closeOnBackdrop) back.addEventListener('mousedown', (e) => { if (e.target === back) api.close(undefined); });
 	const onKey = (e) => {
 		if (modalStack[modalStack.length - 1] !== api) return;
-		if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); api.close(undefined); }
+		if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); api.close(undefined); return; }
+		if (e.key === 'Tab') {
+			const f = [...box.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
+			if (!f.length) { e.preventDefault(); box.focus(); return; }
+			const i = f.indexOf(document.activeElement);
+			if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+			else if (!e.shiftKey && (i < 0 || i === f.length - 1)) { e.preventDefault(); f[0].focus(); }
+		}
 	};
 	document.addEventListener('keydown', onKey, true);
 	const api = {
 		el: box, body: bodyEl, foot: footEl, result,
 		close(r) {
 			document.removeEventListener('keydown', onKey, true);
+			const hadFocus = box.contains(document.activeElement);
 			back.remove();
 			const i = modalStack.indexOf(api);
 			if (i >= 0) modalStack.splice(i, 1);
+			if (hadFocus && opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
 			if (onClose) onClose(r);
 			resolve(r);
 		},
@@ -89,20 +102,29 @@ function modal({ title, width = '', body, foot, onClose, closeOnBackdrop = true,
 	else footEl.remove();
 	document.getElementById('overlay-root').appendChild(back);
 	modalStack.push(api);
+	// the dialog itself takes focus; callers may move it to a field or a safe button right after
+	box.focus();
 	return api;
 }
 
-function confirmDialog({ title, message, detail, okLabel = 'OK', cancelLabel = 'Cancel', danger = false, icon: ic = danger ? 'warning' : 'info', extra = null }) {
+/**
+ * Yes/no confirmation. Focus starts on Cancel, so Enter never confirms by itself.
+ * `dontAsk`: called when the user confirms with "Don't ask again" ticked (the caller turns
+ * its own confirmation setting off; Settings → Confirmations turns it back on).
+ */
+function confirmDialog({ title, message, detail, okLabel = 'OK', cancelLabel = 'Cancel', danger = false, icon: ic = danger ? 'warning' : 'info', extra = null, dontAsk = null }) {
 	const ok = h(`button.btn.${danger ? 'danger' : 'primary'}`, okLabel);
 	const cancel = h('button.btn', cancelLabel);
+	const dontAskCb = dontAsk ? h('input', { type: 'checkbox' }) : null;
 	const m = modal({
 		title, icon: ic,
-		body: [h('div', { style: { whiteSpace: 'pre-wrap' } }, message || ''), detail ? h('div.faint.small', { style: { marginTop: '10px', whiteSpace: 'pre-wrap' } }, detail) : null, extra].filter(Boolean),
+		body: [h('div', { style: { whiteSpace: 'pre-wrap' } }, message || ''), detail ? h('div.faint.small', { style: { marginTop: '10px', whiteSpace: 'pre-wrap' } }, detail) : null, extra,
+			dontAskCb ? h('label.check.dont-ask', { title: 'Turn it back on in Settings → Confirmations' }, dontAskCb, h('span', 'Don\'t ask again')) : null].filter(Boolean),
 		foot: [cancel, ok],
 	});
-	ok.onclick = () => m.close(true);
+	ok.onclick = () => { if (dontAskCb && dontAskCb.checked) dontAsk(); m.close(true); };
 	cancel.onclick = () => m.close(false);
-	setTimeout(() => ok.focus(), 0);
+	cancel.focus();
 	return m.result.then((r) => !!r);
 }
 
@@ -110,7 +132,7 @@ function alertDialog(title, message, ic = 'info') {
 	const ok = h('button.btn.primary', 'OK');
 	const m = modal({ title, icon: ic, body: h('div', { style: { whiteSpace: 'pre-wrap' } }, message), foot: [ok] });
 	ok.onclick = () => m.close(true);
-	setTimeout(() => ok.focus(), 0);
+	ok.focus();
 	return m.result;
 }
 
@@ -129,15 +151,17 @@ function promptDialog({ title, label, value = '', okLabel = 'OK', placeholder = 
 	ok.onclick = submit;
 	cancel.onclick = () => m.close(null);
 	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-	setTimeout(() => { input.focus(); input.select(); }, 0);
+	input.focus(); input.select();
 	return m.result.then((r) => (r == null ? null : r));
 }
 
-/** Three-way choice. options: [{label, value, primary, danger}] */
+/** Three-way choice. options: [{label, value, primary, danger}]. Focus starts on the first non-danger option. */
 function choiceDialog({ title, message, options, icon: ic = 'info' }) {
 	const btns = options.map((o) => h(`button.btn${o.primary ? '.primary' : ''}${o.danger ? '.danger' : ''}`, o.label));
 	const m = modal({ title, icon: ic, body: h('div', { style: { whiteSpace: 'pre-wrap' } }, message), foot: btns });
 	btns.forEach((b, i) => { b.onclick = () => m.close(options[i].value); });
+	const safe = btns[options.findIndex((o) => !o.danger)];
+	if (safe) safe.focus();
 	return m.result;
 }
 

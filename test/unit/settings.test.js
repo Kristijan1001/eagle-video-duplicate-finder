@@ -16,6 +16,15 @@ test('normalize: unknown keys dropped, wrong types fall back, ranges clamped', (
 	assert.strictEqual(s.aiPercent, S.DEFAULTS.aiPercent);
 });
 
+test('confirmations: all on by default, a saved "don\'t ask again" is kept', () => {
+	const keys = ['confirmTrash', 'confirmMoveToFolder', 'confirmAddToFolder', 'confirmAddTag'];
+	const d = S.normalize({});
+	for (const k of keys) assert.strictEqual(d[k], true, k);
+	const s = S.normalize({ confirmMoveToFolder: false, confirmTrash: 'no' });
+	assert.strictEqual(s.confirmMoveToFolder, false);
+	assert.strictEqual(s.confirmTrash, true); // a wrong type never switches a confirmation off
+});
+
 test('profiles: applying one is detected as active', () => {
 	for (const name of Object.keys(S.PROFILES)) {
 		const s = S.applyProfile(S.normalize({}), name);

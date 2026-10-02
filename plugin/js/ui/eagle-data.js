@@ -291,12 +291,15 @@ class EagleData {
 		return changed;
 	}
 
+	/** 'move' replaces each item's folders with [folderId]; 'add' keeps them. Only `ids` are touched. */
 	async setFolders(ids, folderId, mode) {
 		const items = await this.itemsByIds(ids);
 		const changed = [];
 		for (const it of items) {
 			const prev = [...(it.folders || [])];
-			it.folders = mode === 'move' ? [folderId] : unique([...prev, folderId]);
+			const next = mode === 'move' ? [folderId] : unique([...prev, folderId]);
+			if (next.length === prev.length && next.every((f, i) => f === prev[i])) continue; // already there
+			it.folders = next;
 			await it.save();
 			changed.push({ item: it, prev });
 		}

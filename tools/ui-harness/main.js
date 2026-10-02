@@ -14,6 +14,7 @@
 //   GET  /console   collected console messages (and clears them)
 //   GET  /reload    reload the page
 //   GET  /size?w=&h=  resize the window
+//   GET  /key?code=Enter   send a real key press to the page
 
 const { app, BrowserWindow, ipcMain, dialog, clipboard, protocol } = require('electron');
 const path = require('path');
@@ -116,6 +117,15 @@ app.whenReady().then(() => {
 		if (url.pathname === '/console') { const out = consoleLog.splice(0); send(200, { ok: true, log: out }); return; }
 		if (url.pathname === '/reload') { win.webContents.reloadIgnoringCache(); send(200, { ok: true }); return; }
 		if (url.pathname === '/size') { win.setSize(Number(url.searchParams.get('w')), Number(url.searchParams.get('h'))); send(200, { ok: true }); return; }
+		if (url.pathname === '/key') {
+			// a real key press (keyDown/char/keyUp), so default actions like Enter on a button run
+			const keyCode = url.searchParams.get('code');
+			win.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+			if (keyCode === 'Enter' || keyCode.length === 1) win.webContents.sendInputEvent({ type: 'char', keyCode: keyCode === 'Enter' ? '\r' : keyCode });
+			win.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+			setTimeout(() => send(200, { ok: true }), 150);
+			return;
+		}
 		if (url.pathname === '/quit') { quitting = true; send(200, { ok: true }); setTimeout(() => app.exit(0), 100); return; }
 		send(404, { ok: false });
 	}).listen(port, '127.0.0.1');
