@@ -1,3 +1,5 @@
+<a href="https://buymeacoffee.com/kristijan1001" target="_blank"> <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="160" alt="Buy Me a Coffee"> </a>
+
 # Video Duplicate Finder for Eagle
 
 An [Eagle](https://eagle.cool) plugin that finds duplicate and near-duplicate videos and images in
