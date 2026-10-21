@@ -122,12 +122,6 @@ const DEFAULTS = Object.freeze({
 	mergeUrl: true,
 	duplicateTag: 'Duplicate',
 
-	// ── Confirmations before changing Eagle items (on by default; "Don't ask again" turns one off) ──
-	confirmTrash: true,
-	confirmMoveToFolder: true,
-	confirmAddToFolder: true,
-	confirmAddTag: true,
-
 	// ── Misc ──
 	customCommands: { openItem: '', openMultiple: '', openItemInFolder: '', openMultipleInFolder: '' },
 	keyboardShortcuts: {},

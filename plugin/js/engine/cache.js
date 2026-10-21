@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isItemId, fileFor } = require('../core/ids');
 
 const MAGIC = 0x43464456; // 'VDFC' little-endian
 const VERSION = 2;
@@ -153,10 +154,16 @@ class Cache {
 				if (version !== VERSION) throw new Error(`unsupported version ${version}`);
 				const count = buf.readUInt32LE(8);
 				let pos = 12;
+				let invalid = 0;
 				for (let i = 0; i < count; i++) {
 					const r = decodeEntry(buf, pos);
 					pos = r.pos;
+					if (!isItemId(r.entry.id)) { invalid++; continue; } // never let a bad id near a file path
 					this.entries.set(r.entry.id, r.entry);
+				}
+				if (invalid) {
+					this.dirty.add(s); // rewritten without them on the next save
+					this.log('warn', `Cache shard ${s}: ${invalid} entr${invalid === 1 ? 'y' : 'ies'} with an invalid item id dropped.`);
 				}
 			}
 			catch (err) {
@@ -193,16 +200,22 @@ class Cache {
 
 	getOrCreate(id) {
 		let e = this.entries.get(id);
-		if (!e) { e = newEntry(id); this.entries.set(id, e); this.markDirty(id); }
+		if (!e) {
+			if (!isItemId(id)) throw new Error(`Not an Eagle item id: ${JSON.stringify(String(id)).slice(0, 80)}`);
+			e = newEntry(id); this.entries.set(id, e); this.markDirty(id);
+		}
 		return e;
 	}
 
 	markDirty(id) { this.dirty.add(shardOf(id)); }
 
+	/** dense/<id>.bin, or null for anything that is not an item id (see core/ids). */
+	denseFile(id) { return fileFor(this.denseDir, id, '.bin'); }
+
 	delete(id) {
 		if (this.entries.delete(id)) this.markDirty(id);
-		const dense = path.join(this.denseDir, `${id}.bin`);
-		try { fs.unlinkSync(dense); } catch { /* none */ }
+		const dense = this.denseFile(id);
+		if (dense) { try { fs.unlinkSync(dense); } catch { /* none */ } }
 	}
 
 	/** Drop everything derived from content (VDF ClearCachedMediaData); identity stays. */
@@ -214,7 +227,8 @@ class Cache {
 		e.emb.clear();
 		e.flags &= ~(EntryFlags.ThumbnailError | EntryFlags.MetadataError | EntryFlags.TooDark |
 			EntryFlags.NoAudioTrack | EntryFlags.AudioFingerprintError | EntryFlags.SilentAudioTrack);
-		try { fs.unlinkSync(path.join(this.denseDir, `${e.id}.bin`)); } catch { /* none */ }
+		const dense = this.denseFile(e.id);
+		if (dense) { try { fs.unlinkSync(dense); } catch { /* none */ } }
 		this.markDirty(e.id);
 	}
 
@@ -253,7 +267,8 @@ class Cache {
 	 * Returns { failed, interval, count, emb: Int8Array(count*384), valid: Uint8Array(count) } | null.
 	 */
 	readDense(id, size, mtime) {
-		const file = path.join(this.denseDir, `${id}.bin`);
+		const file = this.denseFile(id);
+		if (!file) return null;
 		try {
 			const buf = fs.readFileSync(file);
 			const headerLen = buf.readUInt32LE(0);
@@ -271,6 +286,8 @@ class Cache {
 	}
 
 	writeDense(id, size, mtime, rec) {
+		const file = this.denseFile(id);
+		if (!file) throw new Error(`Not an Eagle item id: ${JSON.stringify(String(id)).slice(0, 80)}`);
 		fs.mkdirSync(this.denseDir, { recursive: true });
 		const header = Buffer.from(JSON.stringify({ size, mtime, failed: !!rec.failed, interval: rec.interval || 0, count: rec.count || 0 }), 'utf8');
 		const len = Buffer.alloc(4); len.writeUInt32LE(header.length, 0);
@@ -279,7 +296,7 @@ class Cache {
 			parts.push(Buffer.from(rec.emb.buffer, rec.emb.byteOffset, rec.count * EMB));
 			parts.push(Buffer.from(rec.valid.buffer, rec.valid.byteOffset, rec.count));
 		}
-		writeAtomic(path.join(this.denseDir, `${id}.bin`), Buffer.concat(parts));
+		writeAtomic(file, Buffer.concat(parts));
 	}
 
 	stats() {
@@ -340,26 +357,71 @@ class Cache {
 		return out.length;
 	}
 
+	/**
+	 * JSON import. Every record is validated: the id must be an Eagle item id (so it can never
+	 * name a file outside the cache) and every field must have the shape the exporter writes.
+	 * Records that fail are skipped, never partly imported. Returns { imported, rejected }.
+	 */
 	importJson(file) {
 		const j = JSON.parse(fs.readFileSync(file, 'utf8'));
 		if (!j || j.format !== 'vdf-eagle-cache' || !Array.isArray(j.entries)) throw new Error('Not a VDF for Eagle cache export');
-		let n = 0;
+		let imported = 0, rejected = 0;
 		for (const x of j.entries) {
-			if (!x || typeof x.id !== 'string') continue;
-			const e = newEntry(x.id);
-			e.name = x.name || ''; e.ext = x.ext || ''; e.path = x.path || ''; e.size = x.size || 0; e.mtime = x.mtime || 0;
-			e.dateCreated = x.dateCreated || 0; e.dateModified = x.dateModified || 0; e.flags = x.flags || 0;
-			e.mi = x.mediaInfo || null; e.osHash = x.osHash || null; e.exifDate = x.exifDate || 0;
-			for (const [p, b64] of x.gray || []) e.gray.set(p, b64 ? Uint8Array.from(Buffer.from(b64, 'base64')) : null);
-			for (const [p, h] of x.pHash || []) e.ph.set(p, h);
-			if (x.audio != null) { const b = Buffer.from(x.audio, 'base64'); e.audio = new Uint32Array(Uint8Array.from(b).buffer); }
-			for (const [p, b64] of x.emb || []) e.emb.set(p, new Int8Array(Uint8Array.from(Buffer.from(b64, 'base64')).buffer));
+			const e = entryFromJson(x);
+			if (!e) { rejected++; continue; }
 			this.entries.set(e.id, e);
 			this.markDirty(e.id);
-			n++;
+			imported++;
 		}
-		return n;
+		if (rejected) this.log('warn', `Cache import: ${rejected} record(s) skipped (invalid item id or data).`);
+		return { imported, rejected };
 	}
+}
+
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+const str = (v) => (typeof v === 'string' ? v : '');
+const isPos = (p) => typeof p === 'number' && Number.isFinite(p) && p >= 0;
+const B64 = /^[A-Za-z0-9+/]*={0,2}$/;
+function b64Bytes(v, len) {
+	if (typeof v !== 'string' || !B64.test(v)) return null;
+	const b = Buffer.from(v, 'base64');
+	return len == null || b.length === len ? b : null;
+}
+
+/** One exported record → cache entry, or null when anything about it is not as exported. */
+function entryFromJson(x) {
+	if (!x || typeof x !== 'object' || !isItemId(x.id)) return null;
+	const e = newEntry(x.id);
+	e.name = str(x.name); e.ext = str(x.ext); e.path = str(x.path); e.size = num(x.size); e.mtime = num(x.mtime);
+	e.dateCreated = num(x.dateCreated); e.dateModified = num(x.dateModified); e.flags = num(x.flags) >>> 0;
+	e.mi = x.mediaInfo && typeof x.mediaInfo === 'object' && !Array.isArray(x.mediaInfo) ? x.mediaInfo : null;
+	e.osHash = typeof x.osHash === 'string' && /^[0-9a-f]{16}$/.test(x.osHash) ? x.osHash : null;
+	e.exifDate = num(x.exifDate);
+	for (const [key, list] of [['gray', x.gray], ['pHash', x.pHash], ['emb', x.emb]]) {
+		if (list != null && !Array.isArray(list)) return null;
+		for (const item of list || []) if (!Array.isArray(item) || !isPos(item[0])) return null;
+		if (key === 'gray') for (const [p, b64] of list || []) {
+			if (b64 == null) { e.gray.set(p, null); continue; }
+			const b = b64Bytes(b64, GRAY);
+			if (!b) return null;
+			e.gray.set(p, Uint8Array.from(b));
+		}
+		if (key === 'pHash') for (const [p, h] of list || []) {
+			if (!Array.isArray(h) || h.length !== 2 || !h.every((v) => Number.isInteger(v))) return null;
+			e.ph.set(p, [h[0] >>> 0, h[1] >>> 0]);
+		}
+		if (key === 'emb') for (const [p, b64] of list || []) {
+			const b = b64Bytes(b64, EMB);
+			if (!b) return null;
+			e.emb.set(p, new Int8Array(Uint8Array.from(b).buffer));
+		}
+	}
+	if (x.audio != null) {
+		const b = b64Bytes(x.audio);
+		if (!b || b.length % 4) return null;
+		e.audio = new Uint32Array(Uint8Array.from(b).buffer);
+	}
+	return e;
 }
 
 /** OpenSubtitles-style content hash (VDF OsHashUtils): size + LE-u64 sums of first/last 64 KiB. */

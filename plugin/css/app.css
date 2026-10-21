@@ -349,13 +349,15 @@ textarea.input { height: auto; padding: 8px 10px; resize: vertical; font-family:
 .modal:focus { outline: none; }
 /* the button Enter would press is always visibly marked (dialogs start on Cancel) */
 .modal .btn:focus, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.dont-ask { margin-top: 14px; color: var(--text-2); }
 .change-list { margin-top: 10px; max-height: 150px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 3px 8px; font-size: 12px; }
 .change-list .from, .change-list .to, .change-list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .change-list .name { grid-column: 1 / -1; color: var(--text); margin-top: 4px; }
 .change-list .from { color: var(--text-3); }
 .change-list .arrow { color: var(--text-3); }
 .change-list .more { grid-column: 1 / -1; color: var(--text-3); margin-top: 4px; }
+.stays { display: flex; flex-direction: column; gap: 6px; }
+.stay-list { margin-top: 0; grid-template-columns: minmax(0, 1fr); }
+.stay-list .what { color: var(--text-2); white-space: normal; overflow-wrap: anywhere; }
 .picker-scope { margin-bottom: 10px; }
 .callout { display: flex; gap: 10px; padding: 10px 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); }
 .callout.warn { background: var(--warn-soft); border-color: transparent; color: var(--text); }

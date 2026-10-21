@@ -15,6 +15,15 @@ const settingsMod = require('../core/settings');
 const { Matcher, Flags } = require('../core/matcher');
 const { percentageDifference, percentageDifferenceWithoutSpecificPixels, verifyGrayScaleValues } = require('../core/gray');
 const { computePHash, hamming } = require('../core/phash');
+const { isItemId, fileFor } = require('../core/ids');
+
+/** The valid item ids of a request; anything else is ignored rather than turned into a path. */
+function itemIds(ids) { return Array.isArray(ids) ? ids.filter(isItemId) : []; }
+
+/** results/<name>.json for a plain lower-case name ("last" when none or invalid). */
+function resultsFile(name) {
+	return path.join(cache.resultsDir, `${typeof name === 'string' && /^[a-z0-9-]{1,40}$/.test(name) ? name : 'last'}.json`);
+}
 
 let ff = null;
 let cache = null;
@@ -89,10 +98,10 @@ const commands = {
 		const out = {};
 		for (const it of items) {
 			const files = [];
-			const positions = it.isImage ? [0] : it.positions;
+			const positions = it.isImage ? [0] : (Array.isArray(it.positions) ? it.positions : []);
 			for (const pos of positions) {
-				const name = `${it.id}-${String(pos).replace(/[^0-9.]/g, '_')}-${width}.jpg`;
-				const file = path.join(dir, name);
+				const file = fileFor(dir, it.id, `-${String(pos).replace(/[^0-9.]/g, '_')}-${Math.trunc(Number(width)) || 0}.jpg`);
+				if (!file) { files.push(null); continue; }
 				if (!fs.existsSync(file) && fs.existsSync(it.file)) {
 					const jpg = await ff.jpegFrame(it.file, pos, { isImage: it.isImage, maxWidth: width });
 					if (jpg) fs.writeFileSync(file, jpg);
@@ -109,7 +118,8 @@ const commands = {
 		requireInit();
 		const dir = path.join(cache.thumbDir, 'full');
 		fs.mkdirSync(dir, { recursive: true });
-		const out = path.join(dir, `${id}-${String(seconds).replace(/[^0-9.]/g, '_')}-${maxSide || 0}.png`);
+		const out = fileFor(dir, id, `-${String(seconds).replace(/[^0-9.]/g, '_')}-${Math.trunc(Number(maxSide)) || 0}.png`);
+		if (!out) return null;
 		if (!fs.existsSync(out)) {
 			const png = await ff.pngFrame(file, seconds, { isImage, maxSide });
 			if (!png) return null;
@@ -221,7 +231,7 @@ const commands = {
 	},
 	'db.clear'() { requireInit(); cache.clearAll(); cache.save(); return true; },
 	'db.export'({ file }) { requireInit(); return cache.exportJson(file); },
-	'db.import'({ file }) { requireInit(); const n = cache.importJson(file); cache.save(); return n; },
+	'db.import'({ file }) { requireInit(); const r = cache.importJson(file); cache.save(); return r; },
 	'db.list'({ offset = 0, limit = 200, filter = '' }) {
 		requireInit();
 		const q = String(filter || '').toLowerCase();
@@ -234,11 +244,11 @@ const commands = {
 			})),
 		};
 	},
-	'db.clearEntry'({ ids }) { requireInit(); for (const id of ids) { const e = cache.get(id); if (e) cache.clearDerived(e); } cache.save(); return true; },
-	'db.deleteEntry'({ ids }) { requireInit(); for (const id of ids) cache.delete(id); cache.save(); return true; },
+	'db.clearEntry'({ ids }) { requireInit(); for (const id of itemIds(ids)) { const e = cache.get(id); if (e) cache.clearDerived(e); } cache.save(); return true; },
+	'db.deleteEntry'({ ids }) { requireInit(); for (const id of itemIds(ids)) cache.delete(id); cache.save(); return true; },
 	'db.exclude'({ ids, value }) {
 		requireInit();
-		for (const id of ids) {
+		for (const id of itemIds(ids)) {
 			const e = cache.getOrCreate(id);
 			if (value) e.flags |= EntryFlags.ManuallyExcluded; else e.flags &= ~EntryFlags.ManuallyExcluded;
 			cache.markDirty(id);
@@ -252,7 +262,7 @@ const commands = {
 	},
 	'db.markDeleted'({ ids, remember }) {
 		requireInit();
-		for (const id of ids) {
+		for (const id of itemIds(ids)) {
 			const e = cache.get(id);
 			if (!e) continue;
 			if (remember) { e.flags |= EntryFlags.Tombstone; cache.markDirty(id); }
@@ -262,11 +272,11 @@ const commands = {
 	},
 	'db.restoreDeleted'({ ids }) {
 		requireInit();
-		for (const id of ids) { const e = cache.get(id); if (e && (e.flags & EntryFlags.Tombstone)) { e.flags &= ~EntryFlags.Tombstone; cache.markDirty(id); } }
+		for (const id of itemIds(ids)) { const e = cache.get(id); if (e && (e.flags & EntryFlags.Tombstone)) { e.flags &= ~EntryFlags.Tombstone; cache.markDirty(id); } }
 		cache.save();
 		return true;
 	},
-	'lists.notAMatch.add'({ ids }) { requireInit(); cache.lists.notAMatch.push([...new Set(ids)]); cache.saveLists(); return cache.lists.notAMatch.length; },
+	'lists.notAMatch.add'({ ids }) { requireInit(); cache.lists.notAMatch.push([...new Set(itemIds(ids))]); cache.saveLists(); return cache.lists.notAMatch.length; },
 	'lists.notAMatch.remove'({ index }) { requireInit(); cache.lists.notAMatch.splice(index, 1); cache.saveLists(); return true; },
 	'lists.notAMatch.get'() { requireInit(); return cache.lists.notAMatch; },
 	'lists.notAMatch.prune'({ allIds }) {
@@ -282,7 +292,7 @@ const commands = {
 	'results.save'({ name, data }) {
 		requireInit();
 		fs.mkdirSync(cache.resultsDir, { recursive: true });
-		const file = path.join(cache.resultsDir, `${name || 'last'}.json`);
+		const file = resultsFile(name);
 		const tmp = `${file}.tmp`;
 		fs.writeFileSync(tmp, JSON.stringify(data));
 		fs.renameSync(tmp, file);
@@ -290,7 +300,7 @@ const commands = {
 	},
 	'results.load'({ name }) {
 		requireInit();
-		const file = path.join(cache.resultsDir, `${name || 'last'}.json`);
+		const file = resultsFile(name);
 		if (!fs.existsSync(file)) return null;
 		try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 	},

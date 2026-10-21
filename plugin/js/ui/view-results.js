@@ -11,6 +11,8 @@ const diffmap = require('../core/diffmap');
 const { sameLibrary } = require('./store');
 const sel = require('../core/selection');
 const expr = require('../core/expression');
+const { isItemId, isItemName, isItemExt } = require('../core/ids');
+const { planMerge } = require('../core/merge');
 
 const GROUP_GAP = 12;
 const HEAD_H = 42;
@@ -897,9 +899,22 @@ function create(app) {
 			list.slice(0, 12).map((m) => h('div', `${m.name}.${m.ext}`)), list.length > 12 ? h('div', `…and ${number(list.length - 12)} more`) : null);
 	}
 
+	/** What merging changes on one kept copy, in words (from core/merge planMerge). */
+	function describeMerge(plan) {
+		const parts = [];
+		if (plan.addTags.length) parts.push(`gains tags ${plan.addTags.join(', ')}`);
+		if (plan.addFolders.length) parts.push(`gains folders ${app.eagleData.folderPaths(plan.addFolders).join(', ') || `(${plan.addFolders.length})`}`);
+		if (plan.star) parts.push(`rating ${plan.star.from} → ${plan.star.to} stars`);
+		if (plan.notesAdded) parts.push(`notes of ${plan.notesAdded} other cop${plan.notesAdded === 1 ? 'y' : 'ies'} added to its notes`);
+		if (plan.url) parts.push(`source URL set to ${plan.url}`);
+		return parts.length ? parts.join(' · ') : 'nothing new to take over';
+	}
+
 	/**
-	 * Move exactly `list` to Eagle's trash: the confirmation shows these items and nothing else
-	 * is touched. A group losing every copy is always confirmed, even with the confirmation off.
+	 * Move exactly `list` to Eagle's trash, always after a confirmation (Delete key, Trash checked,
+	 * Merge then trash, a group's Merge into best copy). The confirmation lists the items, the copy
+	 * that stays in each group and, when merging, exactly what that copy takes over. Only these
+	 * items and these kept copies are changed.
 	 */
 	async function trashItems(list, mergeFirst) {
 		const toTrash = list.filter((m) => !m.gone);
@@ -908,36 +923,60 @@ function create(app) {
 		const byGroup = sel.groupsOf(toTrash);
 		const wholeGroups = [...byGroup.keys()].filter((g) => groups.get(g).every((m) => trashSet.has(m) || m.gone));
 		const size = toTrash.reduce((a, m) => a + m.size, 0);
-		let merge = mergeFirst;
-		if (s().confirmTrash || wholeGroups.length) {
-			const mergeCb = h('input', { type: 'checkbox' });
-			mergeCb.checked = mergeFirst;
-			const keeper = byGroup.size === 1 ? pickKeeperFor([...byGroup.keys()][0], trashSet) : null;
-			const extra = h('div.col', { style: { marginTop: '12px', gap: '8px' } },
-				wholeGroups.length ? h('div.callout.bad', icon('warning', 18), h('div', `${wholeGroups.length} group(s) would lose every copy: no copy of that content would remain in the library.`)) : null,
-				keeper ? h('div.small', 'The copy that stays: ', h('b', `${keeper.name}.${keeper.ext}`)) : null,
-				h('label.check', mergeCb, h('span', 'First merge tags, folders, rating, notes and source URL into the copy that stays')),
-				h('div.faint.small', 'Items go to Eagle\'s trash, where they can be restored until you empty it. Undo is available right after.'),
-				nameList(toTrash));
-			const ok = await kit.confirmDialog({
-				title: 'Move to Eagle trash?', message: `Move ${number(toTrash.length)} item(s) (${bytes(size)}) to Eagle's trash?`,
-				okLabel: `Move ${number(toTrash.length)} to trash`, danger: true, extra,
-				dontAsk: wholeGroups.length ? null : () => app.setSettings({ confirmTrash: false }),
-			});
-			if (!ok) return;
-			merge = mergeCb.checked;
+		const opts = { ...s() };
+		// the kept copy per group is fixed now; the merge below uses exactly these
+		const keepers = [];
+		for (const [gid, ch] of byGroup) {
+			const keeper = pickKeeperFor(gid, trashSet);
+			if (!keeper) continue;
+			const k = eagleInfo.get(keeper.id);
+			const others = ch.map((m) => eagleInfo.get(m.id)).filter(Boolean);
+			keepers.push({ gid, keeper, members: ch, plan: k ? planMerge(k, others, opts) : null });
 		}
+		const mergeCb = h('input', { type: 'checkbox' });
+		mergeCb.checked = mergeFirst;
+		const stays = h('div.stays');
+		let okBtn = null;
+		const renderStays = () => {
+			clear(stays);
+			const merge = mergeCb.checked;
+			if (keepers.length) {
+				stays.append(h('div.small', merge ? 'The copy that stays in each group, and what it takes over from the trashed copies:' : 'The copy that stays in each group (not changed):'),
+					h('div.change-list.stay-list', keepers.slice(0, 10).flatMap(({ keeper, plan }) => [
+						h('div.name', `${keeper.name}.${keeper.ext}`),
+						merge ? h('div.what', plan ? describeMerge(plan) : 'not found in Eagle; nothing is merged') : null,
+					]), keepers.length > 10 ? h('div.more', `…and ${number(keepers.length - 10)} more group(s)`) : null));
+			}
+			if (okBtn) okBtn.textContent = merge && keepers.length ? `Merge and move ${number(toTrash.length)} to trash` : `Move ${number(toTrash.length)} to trash`;
+		};
+		mergeCb.addEventListener('change', renderStays);
+		renderStays();
+		const extra = h('div.col', { style: { marginTop: '12px', gap: '8px' } },
+			wholeGroups.length ? h('div.callout.bad', icon('warning', 18), h('div', `${wholeGroups.length} group(s) would lose every copy: no copy of that content would remain in the library.`)) : null,
+			h('div.small', h('b', 'Moved to the trash:')), nameList(toTrash),
+			h('label.check', mergeCb, h('span', 'First merge tags, folders, rating, notes and source URL into the copy that stays (as set in Settings → Merge into keeper)')),
+			stays,
+			h('div.faint.small', 'Items go to Eagle\'s trash, where they can be restored until you empty it. Undo also reverts the merge.'));
+		const ok = await kit.confirmDialog({
+			title: 'Move to Eagle trash?', message: `Move ${number(toTrash.length)} item(s) (${bytes(size)}) to Eagle's trash?`,
+			okLabel: `Move ${number(toTrash.length)} to trash`, danger: true, extra,
+			withOk: (btn) => { okBtn = btn; renderStays(); },
+		});
+		if (!ok) return;
+		const merge = mergeCb.checked;
 		const b = kit.busy('Moving to trash');
 		const merges = [];
 		try {
 			if (merge) {
 				let gi = 0;
-				for (const [gid, ch] of byGroup) {
+				for (const { keeper, members, plan } of keepers) {
 					gi++;
-					const keeper = pickKeeperFor(gid, trashSet);
-					if (!keeper) continue;
-					b.update(`Merging group ${gi} of ${byGroup.size}`, gi / byGroup.size / 2);
-					try { merges.push(await app.eagleData.mergeInto(keeper.id, ch.map((m) => m.id), s())); }
+					if (!plan || !plan.changed) continue;
+					b.update(`Merging group ${gi} of ${keepers.length}`, gi / keepers.length / 2);
+					try {
+						const r = await app.eagleData.mergeInto(keeper.id, members.map((m) => m.id), opts);
+						if (r) merges.push(r);
+					}
 					catch (err) { app.log('warn', `Merge into "${keeper.name}" failed: ${err.message}`); }
 				}
 			}
@@ -1026,12 +1065,11 @@ function create(app) {
 	async function tagItems(list, tag) {
 		const live = list.filter((m) => !m.gone);
 		if (!live.length) { kit.toast('Check the items to tag first.'); return; }
-		if (s().confirmAddTag && !await kit.confirmDialog({
+		if (!await kit.confirmDialog({
 			title: 'Tag checked items?', icon: 'tag',
 			message: `Add the tag "${tag}" to ${number(live.length)} checked item(s)?`,
 			detail: 'Their existing tags are kept. Undo removes the tag again.',
 			okLabel: `Tag ${number(live.length)} item(s)`, extra: nameList(live),
-			dontAsk: () => app.setSettings({ confirmAddTag: false }),
 		})) return;
 		const b = kit.busy('Tagging');
 		try {
@@ -1053,31 +1091,27 @@ function create(app) {
 		const live = list.filter((m) => !m.gone);
 		if (!live.length) { kit.toast('Check the items first.'); return; }
 		const move = mode === 'move';
-		const confirmKey = move ? 'confirmMoveToFolder' : 'confirmAddToFolder';
 		const n = number(live.length);
-		const folderId = await dialogs.pickFolder({ title: move ? 'Move checked items to folder' : 'Add checked items to folder', count: live.length, mode, confirmNext: !!s()[confirmKey] });
+		const folderId = await dialogs.pickFolder({ title: move ? 'Move checked items to folder' : 'Add checked items to folder', count: live.length, mode });
 		if (!folderId) return;
 		const dest = app.eagleData.folderPaths([folderId])[0] || (app.eagleData.folders.get(folderId) || {}).name || 'folder';
-		if (s()[confirmKey]) {
-			const pathsOf = (m) => { const e = eagleInfo.get(m.id); return e ? app.eagleData.folderPaths(e.folders) : []; };
-			const rows = live.slice(0, 12).flatMap((m) => {
-				const cur = pathsOf(m);
-				const from = cur.join(', ') || 'no folder';
-				const to = move ? dest : [...cur.filter((p) => p !== dest), dest].join(', ');
-				return [h('div.name', `${m.name}.${m.ext}`), h('div.from', { title: from }, from), h('span.arrow', '→'), h('div.to', { title: to }, to)];
-			});
-			const ok = await kit.confirmDialog({
-				title: move ? 'Move to folder?' : 'Add to folder?', icon: move ? 'warning' : 'folder', danger: move,
-				message: move ? `Move ${n} checked item(s) to "${dest}"?` : `Add ${n} checked item(s) to "${dest}"?`,
-				detail: move
-					? 'Each item\'s current folders are replaced: afterwards it is only in this folder. The files themselves are not moved or changed. Undo puts the old folders back.'
-					: 'The items stay in their current folders as well. Undo takes them out of this folder again.',
-				okLabel: move ? `Move ${n} item(s)` : `Add ${n} item(s)`,
-				extra: h('div.change-list', rows, live.length > 12 ? h('div.more', `…and ${number(live.length - 12)} more`) : null),
-				dontAsk: () => app.setSettings({ [confirmKey]: false }),
-			});
-			if (!ok) return;
-		}
+		const pathsOf = (m) => { const e = eagleInfo.get(m.id); return e ? app.eagleData.folderPaths(e.folders) : []; };
+		const rows = live.slice(0, 12).flatMap((m) => {
+			const cur = pathsOf(m);
+			const from = cur.join(', ') || 'no folder';
+			const to = move ? dest : [...cur.filter((p) => p !== dest), dest].join(', ');
+			return [h('div.name', `${m.name}.${m.ext}`), h('div.from', { title: from }, from), h('span.arrow', '→'), h('div.to', { title: to }, to)];
+		});
+		const ok = await kit.confirmDialog({
+			title: move ? 'Move to folder?' : 'Add to folder?', icon: move ? 'warning' : 'folder', danger: move,
+			message: move ? `Move ${n} checked item(s) to "${dest}"?` : `Add ${n} checked item(s) to "${dest}"?`,
+			detail: move
+				? 'Each item\'s current folders are replaced: afterwards it is only in this folder. The files themselves are not moved or changed. Undo puts the old folders back.'
+				: 'The items stay in their current folders as well. Undo takes them out of this folder again.',
+			okLabel: move ? `Move ${n} item(s)` : `Add ${n} item(s)`,
+			extra: h('div.change-list', rows, live.length > 12 ? h('div.more', `…and ${number(live.length - 12)} more`) : null),
+		});
+		if (!ok) return;
 		const b = kit.busy(move ? 'Moving' : 'Adding to folder');
 		try {
 			const changed = await app.eagleData.setFolders(live.map((m) => m.id), folderId, mode);
@@ -1198,6 +1232,12 @@ function create(app) {
 		try {
 			const j = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
 			if (j.format !== 'vdf-eagle-results' || !Array.isArray(j.items)) throw new Error('This is not a Video Duplicate Finder for Eagle results file.');
+			// ids and names become file paths (thumbnails, frames, the file itself): keep only items that look like Eagle's
+			const valid = j.items.filter((it) => it && typeof it === 'object' && isItemId(it.id) && isItemName(it.name) && isItemExt(it.ext) && it.groupId != null);
+			const skipped = j.items.length - valid.length;
+			if (!valid.length) throw new Error('The file contains no valid items.');
+			j.items = valid;
+			if (skipped) app.log('warn', `Import results: ${skipped} item(s) with an invalid id, name or extension were skipped.`);
 			if (j.library && !sameLibrary(j.library, eagle.library.path)) {
 				if (!await kit.confirmDialog({ title: 'Different library', message: 'These results were made for another Eagle library. Items that do not exist here will show as deleted. Import anyway?' })) return;
 			}

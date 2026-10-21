@@ -69,11 +69,11 @@ bitrate, codec, duration, size, folders, tags and rating. The best copy in each 
   folder, export copies to disk, rename, mark groups "not a match" (hidden in future scans), remove
   from the list or exclude from future scans, save a dry-run report, and export results as
   JSON/CSV/HTML.
-- Trashing, moving or adding to a folder, and tagging ask first. The confirmation shows how many
-  items change, lists them, and for a move shows each item's current folders next to the new one
-  (moving replaces an item's folders; adding keeps them). Focus starts on **Cancel**, so Enter
-  never confirms. **Don't ask again** turns one confirmation off; Settings → Confirmations turns
-  it back on. Trashing every copy of a group always asks.
+- Trashing, merging, moving or adding to a folder, and tagging always ask first; nothing skips
+  the confirmation. It shows how many items change and lists them. For a move it shows each
+  item's current folders next to the new one (moving replaces an item's folders; adding keeps
+  them). Before a merge it shows what the copy that stays takes over: tags, folders, rating,
+  notes and source URL. Focus starts on **Cancel**, so Enter never confirms.
 - **Compare** (`C`, double-click, or the group's compare button) shows two files of a group
   in Single, Swipe, Side by side or Stacked view:
   - It plays both in sync, steps both a frame or a second at a time, and scrubs a timeline
@@ -104,7 +104,8 @@ bitrate, codec, duration, size, folders, tags and rating. The best copy in each 
 
 **Database** shows the fingerprint cache for the current library. From there you can clean it up,
 retry failed files, export or import it as JSON, clear it, and manage excluded items and "not a
-match" groups. **Log** shows everything the engine reports.
+match" groups. Imports accept only records with a valid Eagle item id and the exported data
+shape; cache files are only ever written or deleted inside the cache folder. **Log** shows everything the engine reports.
 
 ## Two thresholds when AI is on
 
@@ -198,8 +199,10 @@ After that, the `plugin` folder holds only runtime files, so Eagle can pack it a
 it with **Plugins → Developer options → Import local project**, then right-click the plugin in
 the plugin panel and choose **Pack Plugin**. That is the package Eagle's Plugin Center expects.
 
-`node tools/pack.js` builds the same package without Eagle, into `dist/`; it is used to check
-the package in tests.
+`node tools/eagle-pack.js` produces the same file without clicking through Eagle: it runs Eagle's
+own Pack Plugin code (its bundled `archiver`, on Eagle's runtime) and writes
+`dist/<name> <version> (Eagle pack).eagleplugin`. `node tools/pack.js` builds an equivalent
+package without Eagle, used to check the package in tests.
 
 ## License
 

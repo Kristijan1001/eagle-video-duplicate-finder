@@ -108,21 +108,20 @@ function modal({ title, width = '', body, foot, onClose, closeOnBackdrop = true,
 }
 
 /**
- * Yes/no confirmation. Focus starts on Cancel, so Enter never confirms by itself.
- * `dontAsk`: called when the user confirms with "Don't ask again" ticked (the caller turns
- * its own confirmation setting off; Settings → Confirmations turns it back on).
+ * Yes/no confirmation. Focus starts on Cancel, so Enter never confirms by itself. There is no
+ * "don't ask again": every confirmation is shown every time. `withOk` (optional) receives the
+ * confirm button, so content in `extra` can relabel it.
  */
-function confirmDialog({ title, message, detail, okLabel = 'OK', cancelLabel = 'Cancel', danger = false, icon: ic = danger ? 'warning' : 'info', extra = null, dontAsk = null }) {
+function confirmDialog({ title, message, detail, okLabel = 'OK', cancelLabel = 'Cancel', danger = false, icon: ic = danger ? 'warning' : 'info', extra = null, withOk = null }) {
 	const ok = h(`button.btn.${danger ? 'danger' : 'primary'}`, okLabel);
 	const cancel = h('button.btn', cancelLabel);
-	const dontAskCb = dontAsk ? h('input', { type: 'checkbox' }) : null;
 	const m = modal({
 		title, icon: ic,
-		body: [h('div', { style: { whiteSpace: 'pre-wrap' } }, message || ''), detail ? h('div.faint.small', { style: { marginTop: '10px', whiteSpace: 'pre-wrap' } }, detail) : null, extra,
-			dontAskCb ? h('label.check.dont-ask', { title: 'Turn it back on in Settings → Confirmations' }, dontAskCb, h('span', 'Don\'t ask again')) : null].filter(Boolean),
+		body: [h('div', { style: { whiteSpace: 'pre-wrap' } }, message || ''), detail ? h('div.faint.small', { style: { marginTop: '10px', whiteSpace: 'pre-wrap' } }, detail) : null, extra].filter(Boolean),
 		foot: [cancel, ok],
 	});
-	ok.onclick = () => { if (dontAskCb && dontAskCb.checked) dontAsk(); m.close(true); };
+	if (withOk) withOk(ok);
+	ok.onclick = () => m.close(true);
 	cancel.onclick = () => m.close(false);
 	cancel.focus();
 	return m.result.then((r) => !!r);

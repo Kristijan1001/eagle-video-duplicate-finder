@@ -4,9 +4,9 @@
 // save()/moveToTrash() — metadata.json and library files are never touched directly.
 
 const path = require('path');
+const { planMerge, MAX_ANNOTATION } = require('../core/merge');
 
 const ITEM_FIELDS = ['id', 'name', 'ext', 'width', 'height', 'size', 'folders', 'tags', 'star', 'modificationTime', 'lastModified', 'url', 'annotation', 'noThumbnail'];
-const MAX_ANNOTATION = 10000; // item.save limit in Eagle 4 (MAX_STRING_LENGTH)
 
 class EagleData {
 	constructor(log) {
@@ -233,35 +233,25 @@ class EagleData {
 	 * annotations joined, URL kept (or taken from a duplicate). Returns the keeper's previous
 	 * values for undo.
 	 */
+	/**
+	 * Merge duplicates' organisation into the keeper (core/merge planMerge: the same plan the
+	 * confirmation showed). Returns the keeper's previous values for undo, or null when there was
+	 * nothing to merge.
+	 */
 	async mergeInto(keeperId, otherIds, opts) {
 		const [keeper] = await this.itemsByIds([keeperId]);
 		const others = await this.itemsByIds(otherIds);
 		if (!keeper) throw new Error('The item to keep no longer exists.');
 		const before = { tags: [...(keeper.tags || [])], folders: [...(keeper.folders || [])], star: keeper.star || 0, annotation: keeper.annotation || '', url: keeper.url || '' };
-		if (opts.mergeTags) keeper.tags = unique([...(keeper.tags || []), ...others.flatMap((o) => o.tags || [])]);
-		if (opts.mergeFolders) keeper.folders = unique([...(keeper.folders || []), ...others.flatMap((o) => o.folders || [])]);
-		if (opts.mergeRating) {
-			const best = Math.max(keeper.star || 0, ...others.map((o) => o.star || 0));
-			if (best !== (keeper.star || 0)) keeper.star = best;
-		}
-		if (opts.mergeAnnotation) {
-			const notes = unique([keeper.annotation || '', ...others.map((o) => o.annotation || '')].map((x) => x.trim()).filter(Boolean));
-			// Eagle's item.save rejects annotations over 10,000 characters: keep whole notes that fit
-			let joined = '';
-			let kept = 0;
-			for (const n of notes) {
-				const next = joined ? `${joined}\n\n${n}` : n;
-				if (next.length > MAX_ANNOTATION) break;
-				joined = next;
-				kept++;
-			}
-			if (kept < notes.length) this.log('warn', `"${keeper.name}": ${notes.length - kept} annotation(s) not merged — Eagle allows ${MAX_ANNOTATION} characters per note.`);
-			if (joined !== (keeper.annotation || '')) keeper.annotation = joined;
-		}
-		if (opts.mergeUrl && !keeper.url) {
-			const u = others.map((o) => o.url).find(Boolean);
-			if (u) { try { keeper.url = u; } catch { /* invalid url format */ } }
-		}
+		const plan = planMerge(before, others, opts);
+		if (plan.notesSkipped) this.log('warn', `"${keeper.name}": ${plan.notesSkipped} annotation(s) not merged — Eagle allows ${MAX_ANNOTATION} characters per note.`);
+		if (!plan.changed) return null;
+		const { next } = plan;
+		if (plan.addTags.length) keeper.tags = next.tags;
+		if (plan.addFolders.length) keeper.folders = next.folders;
+		if (plan.star) keeper.star = next.star;
+		if (next.annotation !== before.annotation) keeper.annotation = next.annotation;
+		if (plan.url) { try { keeper.url = next.url; } catch { /* invalid url format */ } }
 		await keeper.save();
 		this.invalidateItems();
 		return { keeper, before };

@@ -30,12 +30,16 @@ Nothing in the library changes until the user runs an action in Results.
 
 ## Confirmations before batch changes
 
-Every action that changes several Eagle items at once asks first, and the confirmation lists
-exactly the items it will change; only those items are changed.
+Every action that changes several Eagle items at once asks first, every time; there is no
+setting or "don't ask again" that skips it. The confirmation lists exactly the items it will
+change, and only those items are changed.
 
-- **Trash checked** (also *Merge into kept copies, then trash* and a group's *Merge into best
-  copy*): shows the number and size of the items, their names, which copy stays, and a warning
-  when a group would lose every copy.
+- **Trash checked**, the **Delete** key, *Merge into kept copies, then trash* and a group's
+  *Merge into best copy* all open the same confirmation. It shows the number and size of the
+  items and their names, the copy that stays in each group, and a warning when a group would
+  lose every copy. When merging is ticked, it also lists, for each copy that stays, exactly
+  what it takes over: the tags and folders it gains, a rating change, how many notes are
+  added, and a source URL. The merge applies that same plan (`js/core/merge.js`).
 - **Move checked to folder…**: the folder picker states how many items will be moved and that
   their current folders are replaced. Choosing a folder only selects it (no double-click
   shortcut). A separate confirmation then shows the count, the destination path, and each
@@ -44,11 +48,18 @@ exactly the items it will change; only those items are changed.
   confirmation, stating that current folders and tags are kept.
 - In every confirmation, keyboard focus starts on **Cancel**: Enter cancels and never confirms.
   Keyboard focus moves into the dialog when it opens and stays inside it while it is open.
-- **Don't ask again:** each of these confirmations has an unticked "Don't ask again" box. If a
-  user ticks it and confirms, that one confirmation is turned off; all four are listed under
-  **Settings → Confirmations** (on by default) and can be switched back on there. Removing
-  every copy of a group always asks and never offers "Don't ask again". If this option is a
-  problem for the review, it can be removed.
+
+## Imported files
+
+- **Database → Import** (a fingerprint-cache JSON) validates every record: the id must be an
+  Eagle item id (letters and digits only) and every field must have the exported shape;
+  anything else is skipped and counted. Cache files named after an id (`dense/<id>.bin`,
+  thumbnails, compare frames) are built only through `js/core/ids.js`, which rejects any id
+  that is not an item id and any path that would not be a direct child of its cache folder,
+  so ids such as `../x` or `..\x` can never reach a file outside the cache. Entries with an
+  invalid id already in a cache are dropped when it loads.
+- **Results → Import results** keeps only items whose id, name and extension look like
+  Eagle's; the rest are skipped.
 
 ## What the plugin changes in Eagle (only on user action)
 

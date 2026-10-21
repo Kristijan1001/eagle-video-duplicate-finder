@@ -245,18 +245,18 @@ function bind(app) {
 
 	// ── Folder picker (for add/move) ──
 	/**
-	 * Choose a destination folder. Choosing never changes anything by itself: the caller shows
-	 * its confirmation next (`confirmNext`), or, with that turned off, the button says what runs.
-	 * A click selects a folder; only the button commits (no double-click shortcut).
+	 * Choose a destination folder. Choosing never changes anything by itself: the caller always
+	 * shows its own confirmation next. A click selects a folder; only the button continues (no
+	 * double-click shortcut).
 	 */
-	async function pickFolder({ title, count, mode, confirmNext }) {
+	async function pickFolder({ title, count, mode }) {
 		await app.eagleData.loadFolders();
 		const move = mode === 'move';
 		let chosen = null;
 		let q = '';
 		const tree = h('div.tree', { style: { maxHeight: '420px' } });
 		const search = h('input.input', { placeholder: 'Filter folders', style: { width: '100%', marginBottom: '8px' } });
-		const ok = h('button.btn.primary', { disabled: true }, confirmNext ? 'Continue' : `${move ? 'Move' : 'Add'} ${number(count)} item(s) here`);
+		const ok = h('button.btn.primary', { disabled: true }, 'Continue');
 		const render = () => {
 			clear(tree);
 			const folders = app.eagleData.folders;
@@ -277,7 +277,7 @@ function bind(app) {
 		const scope = h('div.callout.info.picker-scope', icon('info', 18), h('div',
 			move ? `${number(count)} checked item(s) will be moved to the folder you choose. Moving replaces their current folders, so afterwards they are only in that folder.`
 				: `${number(count)} checked item(s) will be added to the folder you choose. They stay in their current folders as well.`,
-			confirmNext ? ' Nothing changes until you confirm on the next step.' : ''));
+			' Nothing changes until you confirm on the next step.'));
 		const newBtn = h('button.btn.ghost.left', { onclick: async () => {
 			const name = await kit.promptDialog({ title: 'New folder', label: chosen ? `Inside "${app.eagleData.folders.get(chosen).name}"` : 'At the top level', validate: (v) => (v.trim() ? null : 'Enter a name') });
 			if (!name) return;

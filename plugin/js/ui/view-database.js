@@ -145,7 +145,11 @@ function create(app) {
 		const r = await eagle.dialog.showOpenDialog({ title: 'Import fingerprint database', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
 		if (!r || r.canceled || !r.filePaths.length) return;
 		const b = kit.busy('Importing');
-		try { const n = await app.engine.call('db.import', { file: r.filePaths[0] }); kit.toast(`${number(n)} entries imported.`, { kind: 'good' }); refresh(); }
+		try {
+			const { imported, rejected } = await app.engine.call('db.import', { file: r.filePaths[0] });
+			kit.toast(`${number(imported)} entries imported.${rejected ? ` ${number(rejected)} invalid record(s) skipped.` : ''}`, { kind: rejected ? 'info' : 'good' });
+			refresh();
+		}
 		catch (err) { kit.alertDialog('Import failed', err.message, 'error'); }
 		finally { b.close(); }
 	}
